@@ -5,6 +5,7 @@ from ..db import get_db
 from .. import models
 from ..auth import current_membership
 from ..utils import maturity_level
+from ..audit import record
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -24,6 +25,9 @@ def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership
     org = db.get(models.Organization, org_id)
     if not org:
         raise HTTPException(404, "Organization not found")
+
+    record(db, m, "dashboard_view")
+    db.commit()
 
     members = db.query(models.Membership).filter_by(org_id=org_id).all()
 

@@ -9,7 +9,16 @@ if os.path.exists(_env_path):
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.strip())
 
-SECRET_KEY = os.getenv("SECRET_KEY", "ai-pulse-dev-secret")
+APP_ENV = os.getenv("APP_ENV", "dev")  # "production" turns on the startup check below
+_DEV_SECRET = "ai-pulse-dev-secret"
+SECRET_KEY = os.getenv("SECRET_KEY", _DEV_SECRET)
+if APP_ENV == "production" and SECRET_KEY == _DEV_SECRET:
+    raise RuntimeError("SECRET_KEY must be set to a private value when APP_ENV=production")
+# Comma-separated browser origins allowed to call the API
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
+PASSWORD_ITERATIONS = int(os.getenv("PASSWORD_ITERATIONS", "600000"))
+LOGIN_MAX_FAILURES = 5
+LOGIN_WINDOW_SECONDS = 15 * 60
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./aipulse.db")
 AI_MODE = os.getenv("AI_MODE", "mock")  # "mock" or "live"
 LLM_API_URL = os.getenv("LLM_API_URL", "")

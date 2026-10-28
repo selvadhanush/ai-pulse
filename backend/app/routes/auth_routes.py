@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from .. import models
+from .. import models, ratelimit
 from ..auth import verify_password, make_token, current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,10 +19,14 @@ class SelectOrgIn(BaseModel):
 
 
 @router.post("/login")
-def login(body: LoginIn, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
+    key = f"{request.client.host if request.client else '?'}|{body.email.lower()}"
+    ratelimit.check(key)
     user = db.query(models.User).filter_by(email=body.email).first()
     if not user or not verify_password(body.password, user.password_hash):
+        ratelimit.record_failure(key)
         raise HTTPException(401, "Wrong email or password")
+    ratelimit.clear(key)
     orgs = [
         {"org_id": m.org_id, "org_name": m.org.name, "role": m.role}
         for m in user.memberships

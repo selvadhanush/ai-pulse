@@ -85,7 +85,7 @@ Each phase is its own commit.
 4. **Client requests** (below).
 5. **Custom feature**: risk remediation playbooks (below).
 6. **Frontend.** Navigation bar, executive dashboard, validated diagnostic form, report with confirmed "Delete My Data", and routing that sends employees with answers straight to their report.
-7. **Tests and docs.** 49 tests; see "Tests".
+7. **Tests and docs.** 58 backend tests and 11 frontend tests; see "Tests".
 
 ## Client request (Northwind HR): how it was handled
 
@@ -111,21 +111,37 @@ Each phase is its own commit.
 
 ## Tests
 
-`cd backend && python -m pytest` runs 49 tests covering:
+`cd backend && python -m pytest` runs 58 tests covering:
 
 - cross-tenant blocking (403s on dashboard and `select-org`, employee vs admin, multi-org user scoping);
 - privacy grouping, including the 4-vs-5 boundary and risk suppression;
 - deletion cascade to the report and dashboard;
-- malformed AI output, both in the scoring unit tests and through `/diagnostic/submit` (junk text, fenced JSON, bad scores, invented flags, timeouts).
+- malformed AI output, both in the scoring unit tests and through `/diagnostic/submit` (junk text, fenced JSON, bad scores, invented flags, timeouts);
+- password hashing, login lockout, audit logging, the production secret check and CORS.
 
-## Deliberately left alone
+`cd frontend && npm test` runs 11 component tests (diagnostic validation, report and delete confirmation, dashboard privacy badge and playbook card, session restore).
 
-- **Passwords** are unsalted SHA-256, the default `SECRET_KEY` is a dev value, CORS allows every origin, and the token is kept in `localStorage`. These need fixing before production, but they are outside this brief and need decisions (hashing library, deployment config).
-- No rate limiting, no password reset, no audit log of dashboard access.
-- The seed script drops all tables. It is demo-only and must never run against real data.
-- The frontend does not remember sessions across a page refresh and has no automated tests.
-- SQLite remains the default database.
+## Hardening added after the first pass
+
+These were originally listed as "left alone" and have since been addressed:
+
+- **Passwords** use salted PBKDF2-SHA256 (600,000 iterations, constant-time compare). Hashes from the old unsalted scheme no longer verify, so existing databases must be reseeded or users reset.
+- **`SECRET_KEY`**: with `APP_ENV=production` the app refuses to start on the built-in dev secret.
+- **CORS** is limited to `CORS_ORIGINS` (default `http://localhost:5173`) instead of every origin.
+- **Rate limiting**: 5 failed sign-ins per IP and email within 15 minutes returns 429. The limiter is in memory, so it is per process; use a shared store if you run several workers.
+- **Audit log** (`audit_log` table) records dashboard views, playbook views and employee data deletions, with user, organization and time.
+- **Seed script** refuses to run against a database that already has users unless you pass `--reset`.
+- **Sessions** survive a page refresh. The saved token is checked on load and cleared if it is no longer valid.
+- **Frontend tests**: `cd frontend && npm test` (Vitest + Testing Library, 11 tests).
+- **`backend/.env` was tracked in git.** It is now untracked and ignored; use `backend/.env.example` as the template. The old file is still in git history, so rotate the `SECRET_KEY` and any API key that was ever committed.
+
+## Still deliberately left alone
+
+- **Password reset** needs an email provider and a decision on the flow, so it is not built.
+- **The token stays in `localStorage`**. Moving to an httpOnly cookie also needs CSRF protection and is a design decision.
+- **SQLite** is still the default. `DATABASE_URL` accepts other databases, but only SQLite has been tested.
+- The audit log has no viewer yet; it can only be read from the database.
 
 ## Verification and AI tooling notes
 
-This work was done with Claude Code. Every backend change was run against the test suite. Not verified: the frontend was only built (`vite build`), not exercised in a browser; `AI_MODE=live` was never run against a real model, so real output formats are untested; the Dockerfile fix was not built. A reviewer should treat the playbook text and the fallback-score choice as decisions to confirm, not settled facts.
+This work was done with Claude Code. Every backend change was run against the test suite. Not verified: the UI has component tests and builds, but was not exercised in a real browser; `AI_MODE=live` was never run against a real model, so real output formats are untested; the Dockerfile fix was not built. A reviewer should treat the playbook text and the fallback-score choice as decisions to confirm, not settled facts.

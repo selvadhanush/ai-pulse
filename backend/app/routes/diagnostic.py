@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from .. import models
 from ..auth import current_membership
+from ..audit import record
 from ..services.questions import questions_for, load_questions
 from ..services.scoring import score_open_answer
 
@@ -65,5 +66,6 @@ def submit(body: SubmitIn, m: models.Membership = Depends(current_membership), d
 def delete_my_responses(m: models.Membership = Depends(current_membership), db: Session = Depends(get_db)):
     """Right to delete: remove all of the caller's answers, which also clears their report and dashboard contribution."""
     deleted = db.query(models.Response).filter_by(membership_id=m.id).delete()
+    record(db, m, "responses_deleted", f"{deleted} responses")
     db.commit()
     return {"deleted": deleted}
