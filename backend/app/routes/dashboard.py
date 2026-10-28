@@ -66,6 +66,7 @@ def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership
 
     departments = []
     all_flags = {}
+    visible_avgs = []  # company level uses only groups we are allowed to show
     for g in reported:
         if g["responded"] < MIN_GROUP_SIZE:
             # Even pooled, too few people: show headcount only, no scores or risks
@@ -79,6 +80,7 @@ def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership
             })
             continue
         avgs = g["employee_avgs"]
+        visible_avgs.extend(avgs)
         avg = sum(avgs) / len(avgs) if avgs else None
         departments.append({
             "department": g["name"],
@@ -91,8 +93,17 @@ def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership
         for f, n in g["flags"].items():
             all_flags[f] = all_flags.get(f, 0) + n
 
+    # Counts are safe to total; the average excludes suppressed groups so it can't be used
+    # to back out a small group's score.
+    company_avg = sum(visible_avgs) / len(visible_avgs) if visible_avgs else None
     return {
         "organization": org.name,
+        "totals": {
+            "headcount": sum(g["employees"] for g in groups),
+            "completed": sum(g["responded"] for g in groups),
+            "average_score": round(company_avg, 2) if company_avg is not None else None,
+            "level": maturity_level(company_avg),
+        },
         "departments": departments,
         "top_risks": sorted(all_flags.items(), key=lambda kv: -kv[1])[:5],
     }

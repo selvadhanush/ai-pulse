@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
+import Badge from "../Badge.jsx";
 
 function Section({ title, items }) {
   return (
@@ -12,13 +13,22 @@ function Section({ title, items }) {
 
 function ActionCard({ card, onClose }) {
   return (
-    <div className="card">
-      <button onClick={onClose} style={{ float: "right" }}>Close</button>
+    <div className="card playbook">
+      <button className="secondary" onClick={onClose} style={{ float: "right" }}>Close</button>
       <h3>{card.title}</h3>
       <p>{card.summary}</p>
       <Section title="Recommended guardrails" items={card.guardrails} />
       <Section title="Approved tooling policy" items={card.approved_tooling} />
       <Section title="Team guidance" items={card.team_guidance} />
+    </div>
+  );
+}
+
+function Stat({ label, children }) {
+  return (
+    <div className="card stat">
+      <div className="muted">{label}</div>
+      <div className="big">{children}</div>
     </div>
   );
 }
@@ -37,40 +47,69 @@ export default function Dashboard({ org }) {
     api(`/playbooks/${risk}`).then(setCard).catch((e) => setError(e.message));
   }
 
-  if (error && !data) return <p>{error}</p>;
-  if (!data) return <p>Loading…</p>;
+  if (!data) return <p>{error || "Loading…"}</p>;
+
+  const { totals } = data;
+  const rate = totals.headcount ? Math.round((totals.completed / totals.headcount) * 100) : 0;
 
   return (
-    <div className="card">
+    <>
       <h2>{data.organization}</h2>
-      <table>
-        <thead>
-          <tr><th>Team</th><th>Responded</th><th>Average</th><th>Level</th></tr>
-        </thead>
-        <tbody>
-          {data.departments.map((d) => (
-            <tr key={d.department}>
-              <td>{d.department}</td>
-              <td>{d.responded} / {d.employees}</td>
-              <td>{d.average_score ?? "–"}</td>
-              <td>{d.level}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p><small>Teams with fewer than 5 respondents are grouped as "Other teams", with scores and risks hidden.</small></p>
+      <div className="stats">
+        <Stat label="Total headcount">{totals.headcount}</Stat>
+        <Stat label="Completed diagnostics">
+          {totals.completed} <small className="muted">({rate}%)</small>
+        </Stat>
+        <Stat label="Company AI maturity"><Badge level={totals.level} /></Stat>
+      </div>
 
-      <h3>Top risks</h3>
-      {data.top_risks.length === 0 && <p>No risks to show.</p>}
-      <ul>
-        {data.top_risks.map(([risk, count]) => (
-          <li key={risk}>
-            <button onClick={() => openRisk(risk)}>{risk.replaceAll("_", " ")} ({count})</button>
-          </li>
-        ))}
-      </ul>
-      {error && <p>{error}</p>}
+      <div className="card">
+        <h3>Teams</h3>
+        <table>
+          <thead>
+            <tr><th>Team</th><th>Responded</th><th>Average</th><th>Level</th></tr>
+          </thead>
+          <tbody>
+            {data.departments.map((d) => (
+              <tr key={d.department}>
+                <td>
+                  {d.department}{" "}
+                  {d.department === "Other teams" && (
+                    <span className="badge badge-private" title="Teams with fewer than 5 respondents are grouped so no individual can be identified">
+                      Privacy-protected
+                    </span>
+                  )}
+                </td>
+                <td>{d.responded} / {d.employees}</td>
+                <td>{d.average_score ?? "–"}</td>
+                <td>{d.suppressed ? <span className="muted">{d.level}</span> : <Badge level={d.level} />}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="muted">Teams with fewer than 5 respondents are pooled as "Other teams"; their scores and risks are hidden.</p>
+      </div>
+
+      <div className="card">
+        <h3>Risk alerts</h3>
+        {data.top_risks.length === 0 ? (
+          <p className="muted">No risks to show.</p>
+        ) : (
+          <>
+            <p className="muted">Select a risk to see the recommended actions.</p>
+            <div className="chips">
+              {data.top_risks.map(([risk, count]) => (
+                <button key={risk} className="risk-button" onClick={() => openRisk(risk)}>
+                  {risk.replaceAll("_", " ")} <span className="count">{count}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {error && <p className="error">{error}</p>}
+      </div>
+
       {card && <ActionCard card={card} onClose={() => setCard(null)} />}
-    </div>
+    </>
   );
 }

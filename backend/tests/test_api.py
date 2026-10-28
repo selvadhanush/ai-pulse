@@ -38,6 +38,9 @@ def test_admin_dashboard(client):
     assert [d["department"] for d in rows] == ["Other teams"]
     assert rows[0]["average_score"] is None and rows[0]["suppressed"] is True
     assert r.json()["top_risks"] == []
+    totals = r.json()["totals"]
+    assert totals["headcount"] == 10 and totals["completed"] == 2  # seed: 9 + consultant, 2 responders
+    assert totals["average_score"] is None and totals["level"] == "Not assessed"
 
 
 def test_admin_cannot_see_other_org(client):
