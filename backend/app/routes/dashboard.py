@@ -25,6 +25,10 @@ def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership
     if m.role != "admin":
         raise HTTPException(403, "Admins only")
 
+    # Tenant check first so callers can't probe which org IDs exist
+    if org_id != m.org_id:
+        raise HTTPException(403, "You cannot access another organization")
+
     org = db.get(models.Organization, org_id)
     if not org:
         raise HTTPException(404, "Organization not found")
