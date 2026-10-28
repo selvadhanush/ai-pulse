@@ -139,3 +139,33 @@ def test_deleting_can_drop_a_department_below_threshold(client):
     headers, _ = login(client, "vikram@northwind.test", "Northwind Logistics")
     client.delete("/diagnostic/me", headers=headers)
     assert "Sales" not in {r["department"] for r in _dashboard(client)["departments"]}
+
+
+def test_report_includes_remediation_for_flagged_risks(client):
+    headers, _ = login(client, "priya@northwind.test", "Northwind Logistics")
+    rem = client.get("/reports/me", headers=headers).json()["remediation"]
+    assert [r["risk"] for r in rem] == ["customer_data_shared"]
+    assert rem[0]["tips"]
+
+
+def test_report_has_no_remediation_without_risks(client):
+    headers, _ = login(client, "vikram@northwind.test", "Northwind Logistics")
+    assert client.get("/reports/me", headers=headers).json()["remediation"] == []
+
+
+def test_admin_gets_executive_playbook(client):
+    headers, _ = login(client, "asha@northwind.test", "Northwind Logistics")
+    r = client.get("/playbooks/customer_data_shared", headers=headers)
+    assert r.status_code == 200
+    card = r.json()
+    assert card["guardrails"] and card["approved_tooling"] and card["team_guidance"]
+
+
+def test_playbook_unknown_risk_404(client):
+    headers, _ = login(client, "asha@northwind.test", "Northwind Logistics")
+    assert client.get("/playbooks/nope", headers=headers).status_code == 404
+
+
+def test_employee_cannot_read_executive_playbook(client):
+    headers, _ = login(client, "priya@northwind.test", "Northwind Logistics")
+    assert client.get("/playbooks/customer_data_shared", headers=headers).status_code == 403
