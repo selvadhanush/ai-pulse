@@ -8,6 +8,9 @@ from ..utils import maturity_level
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
+MIN_GROUP_SIZE = 5  # client requirement: no scores or risks for groups smaller than this
+SUPPRESSED_LEVEL = "Not enough responses"
+
 
 @router.get("")
 def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership), db: Session = Depends(get_db)):
@@ -23,12 +26,14 @@ def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership
         raise HTTPException(404, "Organization not found")
 
     members = db.query(models.Membership).filter_by(org_id=org_id).all()
-    departments = []
-    all_flags = {}
+
+    # Per-department tallies. Flags are kept per group so small groups can be dropped.
+    groups = []
     for dept in org.departments:
         dept_members = [x for x in members if x.department_id == dept.id]
         employee_avgs = []  # one average per employee who completed the diagnostic
         responded = 0
+        flags = {}
         for dm in dept_members:
             rows = db.query(models.Response).filter_by(membership_id=dm.id).all()
             if rows:
@@ -38,15 +43,53 @@ def org_dashboard(org_id: int, m: models.Membership = Depends(current_membership
                 employee_avgs.append(sum(scores) / len(scores))
             for r in rows:
                 for f in r.flags or []:
-                    all_flags[f] = all_flags.get(f, 0) + 1
-        avg = sum(employee_avgs) / len(employee_avgs) if employee_avgs else None
+                    flags[f] = flags.get(f, 0) + 1
+        groups.append({"name": dept.name, "employees": len(dept_members), "responded": responded,
+                       "employee_avgs": employee_avgs, "flags": flags})
+
+    # Privacy: groups under MIN_GROUP_SIZE respondents are only ever shown pooled as "Other teams"
+    big = [g for g in groups if g["responded"] >= MIN_GROUP_SIZE]
+    small = [g for g in groups if g["responded"] < MIN_GROUP_SIZE]
+    reported = list(big)
+    if small:
+        pooled_flags = {}
+        for g in small:
+            for f, n in g["flags"].items():
+                pooled_flags[f] = pooled_flags.get(f, 0) + n
+        reported.append({
+            "name": "Other teams",
+            "employees": sum(g["employees"] for g in small),
+            "responded": sum(g["responded"] for g in small),
+            "employee_avgs": [a for g in small for a in g["employee_avgs"]],
+            "flags": pooled_flags,
+        })
+
+    departments = []
+    all_flags = {}
+    for g in reported:
+        if g["responded"] < MIN_GROUP_SIZE:
+            # Even pooled, too few people: show headcount only, no scores or risks
+            departments.append({
+                "department": g["name"],
+                "employees": g["employees"],
+                "responded": g["responded"],
+                "average_score": None,
+                "level": SUPPRESSED_LEVEL,
+                "suppressed": True,
+            })
+            continue
+        avgs = g["employee_avgs"]
+        avg = sum(avgs) / len(avgs) if avgs else None
         departments.append({
-            "department": dept.name,
-            "employees": len(dept_members),
-            "responded": responded,
+            "department": g["name"],
+            "employees": g["employees"],
+            "responded": g["responded"],
             "average_score": round(avg, 2) if avg is not None else None,
             "level": maturity_level(avg),
+            "suppressed": False,
         })
+        for f, n in g["flags"].items():
+            all_flags[f] = all_flags.get(f, 0) + n
 
     return {
         "organization": org.name,

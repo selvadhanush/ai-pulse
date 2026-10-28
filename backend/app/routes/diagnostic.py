@@ -59,3 +59,11 @@ def submit(body: SubmitIn, m: models.Membership = Depends(current_membership), d
         db.add(resp)
     db.commit()
     return {"saved": len(body.answers)}
+
+
+@router.delete("/me")
+def delete_my_responses(m: models.Membership = Depends(current_membership), db: Session = Depends(get_db)):
+    """Right to delete: remove all of the caller's answers, which also clears their report and dashboard contribution."""
+    deleted = db.query(models.Response).filter_by(membership_id=m.id).delete()
+    db.commit()
+    return {"deleted": deleted}
