@@ -4,7 +4,7 @@ import os
 _PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "questions.json")
 
 
-_RANK = {"junior": 0, "mid": 1, "senior": 2, "lead": 3}
+SENIORITY_ORDER = {"junior": 0, "mid": 1, "senior": 2, "lead": 3}
 
 
 def load_questions():
@@ -18,7 +18,7 @@ def questions_for(job_role: str, seniority: str):
     for q in load_questions():
         if q["roles"] != ["all"] and job_role not in q["roles"]:
             continue
-        if _RANK[seniority] < _RANK[q.get("min_seniority", "junior")]:
+        if SENIORITY_ORDER[seniority] < SENIORITY_ORDER[q.get("min_seniority", "junior")]:
             continue
         result.append(q)
     return result

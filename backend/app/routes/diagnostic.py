@@ -35,6 +35,12 @@ def get_questions(m: models.Membership = Depends(current_membership)):
 @router.post("/submit")
 def submit(body: SubmitIn, m: models.Membership = Depends(current_membership), db: Session = Depends(get_db)):
     bank = {q["id"]: q for q in load_questions()}
+    # Validate everything first so a bad answer doesn't wipe the previous submission
+    for a in body.answers:
+        if a.question_id not in bank:
+            raise HTTPException(400, f"Unknown question {a.question_id}")
+    # A new submission replaces the previous one
+    db.query(models.Response).filter_by(membership_id=m.id).delete()
     for a in body.answers:
         q = bank.get(a.question_id)
         if not q:

@@ -41,3 +41,17 @@ def test_admin_cannot_see_other_org(client):
     # Asha is admin of Northwind (org 1); org 2 is Bluepeak
     r = client.get("/dashboard?org_id=2", headers=headers)
     assert r.status_code == 403
+
+
+def test_resubmitting_replaces_previous_answers(client):
+    headers, _ = login(client, "priya@northwind.test", "Northwind Logistics")
+    option = client.get("/diagnostic/questions", headers=headers).json()[0]["options"][0]
+    body = {"answers": [{"question_id": "common-freq", "answer": option}]}
+    admin, data = login(client, "asha@northwind.test", "Northwind Logistics")
+    dash = f"/dashboard?org_id={data['organizations'][0]['org_id']}"
+
+    client.post("/diagnostic/submit", json=body, headers=headers)
+    once = client.get(dash, headers=admin).json()
+    client.post("/diagnostic/submit", json=body, headers=headers)
+    twice = client.get(dash, headers=admin).json()
+    assert once == twice
