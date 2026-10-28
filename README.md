@@ -142,6 +142,18 @@ These were originally listed as "left alone" and have since been addressed:
 - **SQLite** is still the default. `DATABASE_URL` accepts other databases, but only SQLite has been tested.
 - The audit log has no viewer yet; it can only be read from the database.
 
-## Verification and AI tooling notes
+## How I used AI tools
 
-This work was done with Claude Code. Every backend change was run against the test suite. Not verified: the UI has component tests and builds, but was not exercised in a real browser; `AI_MODE=live` was never run against a real model, so real output formats are untested; the Dockerfile fix was not built. A reviewer should treat the playbook text and the fallback-score choice as decisions to confirm, not settled facts.
+I used Claude Code throughout, as a pair-programmer working in this repository.
+
+- **What it did well:** reading the codebase to find the bugs listed above, writing fixes, and writing the tests and docs for each phase. I gave it one phase at a time, and each phase ended with a test run and its own commit.
+- **How I checked it:** every backend change was run against the test suite. For the security-sensitive pieces (tenant isolation, small-group suppression, deletion), the tests assert the blocked or hidden outcome rather than just "returns 200".
+- **What I did not check:** the UI has component tests and builds, but was not exercised in a real browser. `AI_MODE=live` was never run against a real model, so real model output formats are untested. The Dockerfile fix was not built. Treat the playbook text and the neutral fallback score of 3 as decisions to confirm.
+
+### One place the AI got it wrong
+
+When fixing duplicate submissions, the AI added a regression test and reported the work as done. The test compared the admin dashboard before and after a second submit. I later checked it by removing the fix: **the test still passed**. The dashboard averages per employee, so duplicate rows do not change what it shows, and the test could never fail. The fix itself was correct, but the test gave false confidence.
+
+I rewrote the test to count the stored rows for that employee, then re-ran it with the fix removed to confirm that it fails (it does) and with the fix in place to confirm that it passes. The lesson I took from it: for each important test, break the code on purpose and see whether the test notices.
+
+Smaller slips of the same kind were caught in review: a first test assumed the seed data had no respondents (it did), a config rewrite silently dropped the dev-server port, and a scripted edit corrupted a character in `App.jsx`.

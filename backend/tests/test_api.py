@@ -63,6 +63,16 @@ def test_resubmitting_replaces_previous_answers(client):
     twice = client.get(dash, headers=admin).json()
     assert once == twice
 
+    # The dashboard hides duplicates (it averages per employee), so also count the stored rows.
+    # Priya had 2 seeded answers; the submit replaces them with exactly one.
+    from app.db import SessionLocal
+    from app import models
+    db = SessionLocal()
+    user = db.query(models.User).filter_by(email="priya@northwind.test").one()
+    rows = db.query(models.Response).join(models.Membership).filter(models.Membership.user_id == user.id).count()
+    db.close()
+    assert rows == 1
+
 
 def _add_respondents(org_name, dept_name, count, flag=None):
     """Give a department `count` extra employees who each answered once."""
